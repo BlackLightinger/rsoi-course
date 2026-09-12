@@ -29,12 +29,22 @@ Kafka в Kubernetes используется как инфраструктурн
 
 1. для каждого Python-сервиса собирается отдельный Docker image из `docker/python-service.Dockerfile`;
 2. для `web` собирается отдельный NGINX image из `frontend/Dockerfile`;
-3. images публикуются в GHCR с тегами `${GITHUB_SHA}` и `latest`;
-4. workflow подключается к Kubernetes-кластеру через `KUBE_CONFIG`;
-5. применяет манифесты `k8s/base`;
-6. обновляет runtime secrets;
-7. выставляет каждому deployment immutable image `ghcr.io/<owner>/<repo>/<service>:<sha>`;
-8. ждёт rollout для Kafka StatefulSet и всех application deployment’ов.
+3. images публикуются в GHCR с тегами `${GITHUB_SHA}` и `latest`.
+
+Имена GHCR images автоматически приводятся к нижнему регистру. Это важно для репозитория вида `BlackLightinger/rsoi-course`: Docker image будет публиковаться как `ghcr.io/blacklightinger/rsoi-course/<service>:<sha>`.
+
+Kubernetes deploy запускается одним из двух способов:
+
+- автоматически на push в `main`, если repository variable `ENABLE_K8S_DEPLOY` равна `true`;
+- вручную из вкладки GitHub Actions через `Run workflow` с флагом `deploy=true`.
+
+Deploy job:
+
+1. подключается к Kubernetes-кластеру через `KUBE_CONFIG`;
+2. применяет манифесты `k8s/base`;
+3. обновляет runtime secrets;
+4. выставляет каждому deployment immutable image `ghcr.io/<owner>/<repo>/<service>:<sha>`;
+5. ждёт rollout для Kafka StatefulSet и всех application deployment’ов.
 
 ## Требования к кластеру
 
@@ -45,7 +55,17 @@ Kafka в Kubernetes используется как инфраструктурн
 - установленный NGINX Ingress Controller с `ingressClassName: nginx`;
 - namespace `ingress-nginx` с label `kubernetes.io/metadata.name=ingress-nginx` — это стандартно для современных Kubernetes namespace и используется NetworkPolicy.
 
-Пример установки NGINX Ingress Controller:
+Пример установки NGINX Ingress Controller через `kubectl`, если `helm` не установлен:
+
+```bash
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.13.3/deploy/static/provider/cloud/deploy.yaml
+kubectl wait --namespace ingress-nginx \
+  --for=condition=ready pod \
+  --selector=app.kubernetes.io/component=controller \
+  --timeout=180s
+```
+
+Альтернатива через Helm:
 
 ```bash
 helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
@@ -67,6 +87,7 @@ helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
 И environment variable:
 
 - `PUBLIC_URL` — внешний адрес приложения, например `https://flight.example.com`.
+- `ENABLE_K8S_DEPLOY` — `true`, если нужно автоматически деплоить в Kubernetes на каждый push в `main`. Без этой переменной деплой можно запускать вручную через `workflow_dispatch`.
 
 `PUBLIC_URL` используется как OIDC issuer и redirect URI, поэтому он должен совпадать с host, который ведёт на Ingress.
 
