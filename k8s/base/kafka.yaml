@@ -22,6 +22,8 @@ spec:
     metadata:
       labels: { app: kafka, tier: infrastructure }
     spec:
+      securityContext:
+        fsGroup: 1000
       containers:
         - name: kafka
           image: apache/kafka:3.9.1
@@ -39,6 +41,8 @@ spec:
             - { name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR, value: "1" }
             - { name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR, value: "1" }
             - { name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR, value: "1" }
+            - { name: KAFKA_LOG_DIRS, value: "/var/lib/kafka/data" }
+            - { name: KAFKA_HEAP_OPTS, value: "-Xms256m -Xmx512m" }
           volumeMounts:
             - { name: kafka-data, mountPath: /var/lib/kafka/data }
           readinessProbe:

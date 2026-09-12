@@ -1,0 +1,6 @@
+# Public URL as seen by the browser and encoded into iss claim.
+OIDC_ISSUER=http://localhost
+GATEWAY_CLIENT_SECRET=change-this-gateway-secret
+ADMIN_PASSWORD=change-this-admin-password
+PARTNER_API_KEY=change-this-partner-key
+WEB_REDIRECT_URIS=http://localhost/callback,http://localhost:5173/callback,http://127.0.0.1/callback,http://127.0.0.1:5173/callback

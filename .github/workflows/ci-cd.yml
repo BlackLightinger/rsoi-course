@@ -282,12 +282,29 @@ jobs:
           REGISTRY: ${{ steps.settings.outputs.image_prefix }}
           TAG: ${{ github.sha }}
         run: |
-          kubectl -n flight-platform rollout status statefulset/kafka --timeout=240s
+          debug_k8s() {
+            echo "--- Kubernetes objects ---"
+            kubectl -n flight-platform get statefulset,deployment,pods,pvc,svc,ingress -o wide || true
+            echo "--- Kafka pod describe ---"
+            kubectl -n flight-platform describe pod -l app=kafka || true
+            echo "--- Kafka logs ---"
+            kubectl -n flight-platform logs statefulset/kafka --all-containers=true --tail=200 || true
+            echo "--- Recent events ---"
+            kubectl -n flight-platform get events --sort-by=.lastTimestamp | tail -80 || true
+          }
+
+          if ! kubectl -n flight-platform rollout status statefulset/kafka --timeout=480s; then
+            debug_k8s
+            exit 1
+          fi
           for service in $ALL_DEPLOYMENTS; do
             kubectl -n flight-platform set image "deployment/$service" "$service=$REGISTRY/$service:$TAG"
           done
           for service in $ALL_DEPLOYMENTS; do
-            kubectl -n flight-platform rollout status "deployment/$service" --timeout=180s
+            if ! kubectl -n flight-platform rollout status "deployment/$service" --timeout=240s; then
+              debug_k8s
+              exit 1
+            fi
           done
 
   post-deploy-smoke:
@@ -313,9 +330,26 @@ jobs:
 
       - name: Verify Kubernetes rollout state
         run: |
-          kubectl -n flight-platform rollout status statefulset/kafka --timeout=120s
+          debug_k8s() {
+            echo "--- Kubernetes objects ---"
+            kubectl -n flight-platform get statefulset,deployment,pods,pvc,svc,ingress -o wide || true
+            echo "--- Kafka pod describe ---"
+            kubectl -n flight-platform describe pod -l app=kafka || true
+            echo "--- Kafka logs ---"
+            kubectl -n flight-platform logs statefulset/kafka --all-containers=true --tail=200 || true
+            echo "--- Recent events ---"
+            kubectl -n flight-platform get events --sort-by=.lastTimestamp | tail -80 || true
+          }
+
+          if ! kubectl -n flight-platform rollout status statefulset/kafka --timeout=180s; then
+            debug_k8s
+            exit 1
+          fi
           for service in $ALL_DEPLOYMENTS; do
-            kubectl -n flight-platform rollout status "deployment/$service" --timeout=120s
+            if ! kubectl -n flight-platform rollout status "deployment/$service" --timeout=180s; then
+              debug_k8s
+              exit 1
+            fi
           done
           kubectl -n flight-platform get pods -o wide
           kubectl -n flight-platform get ingress
