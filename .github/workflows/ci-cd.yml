@@ -221,12 +221,71 @@ jobs:
           fi
           docker rm -f smoke-web
 
+  local-cluster-images:
+    name: Build images for local Kubernetes
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.ENABLE_K8S_DEPLOY == 'true') ||
+      (github.event_name == 'workflow_dispatch' && inputs.deploy)
+    needs: image-smoke
+    runs-on: self-hosted
+    steps:
+      - name: Clean self-hosted workspace
+        run: |
+          cd "$RUNNER_TEMP"
+          rm -rf "$GITHUB_WORKSPACE"
+          mkdir -p "$GITHUB_WORKSPACE"
+
+      - uses: actions/checkout@v4
+        with:
+          clean: true
+          fetch-depth: 1
+
+      - name: Resolve local image prefix
+        id: image
+        run: |
+          repo="$(printf '%s' "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+          echo "prefix=ghcr.io/$repo" >> "$GITHUB_OUTPUT"
+
+      - name: Build Python service images in local Docker
+        env:
+          REGISTRY: ${{ steps.image.outputs.prefix }}
+          TAG: ${{ github.sha }}
+        run: |
+          for service in $PYTHON_SERVICES; do
+            docker build \
+              -f docker/python-service.Dockerfile \
+              --build-arg SERVICE="$service" \
+              -t "$REGISTRY/$service:$TAG" \
+              -t "$REGISTRY/$service:latest" \
+              .
+          done
+
+      - name: Build web image in local Docker
+        env:
+          REGISTRY: ${{ steps.image.outputs.prefix }}
+          TAG: ${{ github.sha }}
+        run: |
+          docker build \
+            -t "$REGISTRY/web:$TAG" \
+            -t "$REGISTRY/web:latest" \
+            frontend
+
+      - name: List local deployment images
+        env:
+          REGISTRY: ${{ steps.image.outputs.prefix }}
+          TAG: ${{ github.sha }}
+        run: |
+          for service in $ALL_DEPLOYMENTS; do
+            docker image inspect "$REGISTRY/$service:$TAG" >/dev/null
+            docker images "$REGISTRY/$service" --format 'table {{.Repository}}\t{{.Tag}}\t{{.ID}}\t{{.Size}}'
+          done
+
   deploy:
     name: Deploy to Kubernetes
     if: >-
       (github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.ENABLE_K8S_DEPLOY == 'true') ||
       (github.event_name == 'workflow_dispatch' && inputs.deploy)
-    needs: image-smoke
+    needs: [image-smoke, local-cluster-images]
     runs-on: self-hosted
     environment: production
     steps:
@@ -313,6 +372,19 @@ jobs:
             kubectl -n flight-platform get events --sort-by=.lastTimestamp | tail -80 || true
           }
 
+          debug_deployment() {
+            service="$1"
+            echo "--- Deployment $service describe ---"
+            kubectl -n flight-platform describe "deployment/$service" || true
+            echo "--- Pods for $service ---"
+            kubectl -n flight-platform get pods -l "app=$service" -o wide || true
+            echo "--- Pod describe for $service ---"
+            kubectl -n flight-platform describe pods -l "app=$service" || true
+            echo "--- Logs for $service ---"
+            kubectl -n flight-platform logs "deployment/$service" --all-containers=true --tail=200 || true
+            debug_k8s
+          }
+
           for service in $ALL_DEPLOYMENTS; do
             kubectl -n flight-platform set image "deployment/$service" "$service=$REGISTRY/$service:$TAG"
           done
@@ -321,8 +393,8 @@ jobs:
             exit 1
           fi
           for service in $ALL_DEPLOYMENTS; do
-            if ! kubectl -n flight-platform rollout status "deployment/$service" --timeout=240s; then
-              debug_k8s
+            if ! kubectl -n flight-platform rollout status "deployment/$service" --timeout=480s; then
+              debug_deployment "$service"
               exit 1
             fi
           done
@@ -361,13 +433,26 @@ jobs:
             kubectl -n flight-platform get events --sort-by=.lastTimestamp | tail -80 || true
           }
 
+          debug_deployment() {
+            service="$1"
+            echo "--- Deployment $service describe ---"
+            kubectl -n flight-platform describe "deployment/$service" || true
+            echo "--- Pods for $service ---"
+            kubectl -n flight-platform get pods -l "app=$service" -o wide || true
+            echo "--- Pod describe for $service ---"
+            kubectl -n flight-platform describe pods -l "app=$service" || true
+            echo "--- Logs for $service ---"
+            kubectl -n flight-platform logs "deployment/$service" --all-containers=true --tail=200 || true
+            debug_k8s
+          }
+
           if ! kubectl -n flight-platform rollout status statefulset/kafka --timeout=180s; then
             debug_k8s
             exit 1
           fi
           for service in $ALL_DEPLOYMENTS; do
-            if ! kubectl -n flight-platform rollout status "deployment/$service" --timeout=180s; then
-              debug_k8s
+            if ! kubectl -n flight-platform rollout status "deployment/$service" --timeout=240s; then
+              debug_deployment "$service"
               exit 1
             fi
           done

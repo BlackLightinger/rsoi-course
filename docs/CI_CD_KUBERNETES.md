@@ -41,11 +41,12 @@ Kubernetes deploy запускается одним из двух способо
 
 Deploy job:
 
-1. подключается к Kubernetes-кластеру через `KUBE_CONFIG`;
-2. применяет манифесты `k8s/base`;
-3. обновляет runtime secrets;
-4. выставляет каждому deployment immutable image `ghcr.io/<owner>/<repo>/<service>:<sha>`;
-5. ждёт rollout для Kafka StatefulSet и всех application deployment’ов.
+1. для локального Docker Desktop/Minikube сценария self-hosted runner дополнительно собирает все application images в локальный Docker daemon с теми же immutable tags;
+2. подключается к Kubernetes-кластеру через локальный kubeconfig или `KUBE_CONFIG`;
+3. применяет манифесты `k8s/base`;
+4. обновляет runtime secrets;
+5. выставляет каждому deployment immutable image `ghcr.io/<owner>/<repo>/<service>:<sha>`;
+6. ждёт rollout для Kafka StatefulSet и всех application deployment’ов.
 
 После deploy запускается отдельный job `Post-deploy smoke tests`. Он повторно проверяет rollout, открывает port-forward к `gateway`, `web` и `idp`, затем проверяет:
 
@@ -152,4 +153,4 @@ kubectl apply -k k8s/base
 kubectl -n flight-platform describe pod <pod-name>
 ```
 
-CI/CD создаёт `ghcr-pull-secret` и добавляет его в default ServiceAccount namespace `flight-platform`, чтобы локальный кластер мог скачивать private GHCR images, собранные этим workflow.
+CI/CD создаёт `ghcr-pull-secret` и добавляет его в default ServiceAccount namespace `flight-platform`, чтобы кластер мог скачивать private GHCR images, собранные этим workflow. Для Docker Desktop Kubernetes есть дополнительная защита: job `Build images for local Kubernetes` собирает эти же images локально на self-hosted runner, поэтому kubelet может взять их из локального Docker image store при `imagePullPolicy: IfNotPresent`.
