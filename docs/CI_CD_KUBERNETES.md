@@ -127,3 +127,29 @@ kubectl apply -k k8s/base
 ```
 
 В production основной путь — через GitHub Actions, потому что CI/CD заменяет placeholder images на immutable images конкретного commit SHA.
+
+## Troubleshooting локального Kubernetes
+
+Если `kafka-0` долго остаётся в `CrashLoopBackOff`, сначала посмотрите причину:
+
+```bash
+kubectl -n flight-platform describe pod kafka-0
+kubectl -n flight-platform logs kafka-0 --all-containers --tail=200
+kubectl -n flight-platform get events --sort-by=.lastTimestamp | tail -50
+```
+
+Для single-node Kafka в KRaft mode headless Service использует `publishNotReadyAddresses: true`, чтобы DNS-имя `kafka-0.kafka` было доступно ещё до readiness. Если до правки уже был создан старый PVC Kafka и он хранит неудачно инициализированные metadata, для прототипа его можно сбросить:
+
+```bash
+kubectl -n flight-platform delete statefulset kafka
+kubectl -n flight-platform delete pvc kafka-data-kafka-0
+kubectl apply -k k8s/base
+```
+
+Если application pods находятся в `ImagePullBackOff`, проверьте image и доступ к GHCR:
+
+```bash
+kubectl -n flight-platform describe pod <pod-name>
+```
+
+CI/CD создаёт `ghcr-pull-secret` и добавляет его в default ServiceAccount namespace `flight-platform`, чтобы локальный кластер мог скачивать private GHCR images, собранные этим workflow.

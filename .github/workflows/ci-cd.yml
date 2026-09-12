@@ -264,11 +264,22 @@ jobs:
           ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
           GATEWAY_CLIENT_SECRET: ${{ secrets.GATEWAY_CLIENT_SECRET }}
           PARTNER_API_KEY: ${{ secrets.PARTNER_API_KEY }}
+          GHCR_USERNAME: ${{ github.actor }}
+          GHCR_TOKEN: ${{ github.token }}
         run: |
           ADMIN_PASSWORD="${ADMIN_PASSWORD:-admin123}"
           GATEWAY_CLIENT_SECRET="${GATEWAY_CLIENT_SECRET:-gateway-dev-secret}"
           PARTNER_API_KEY="${PARTNER_API_KEY:-partner-demo-key}"
           kubectl apply -k k8s/base
+          kubectl -n flight-platform create secret docker-registry ghcr-pull-secret \
+            --docker-server=ghcr.io \
+            --docker-username="$GHCR_USERNAME" \
+            --docker-password="$GHCR_TOKEN" \
+            --docker-email="$GHCR_USERNAME@users.noreply.github.com" \
+            --dry-run=client -o yaml | kubectl apply -f -
+          kubectl -n flight-platform patch serviceaccount default \
+            --type=merge \
+            -p '{"imagePullSecrets":[{"name":"ghcr-pull-secret"}]}'
           kubectl -n flight-platform create secret generic flight-platform-secrets \
             --from-literal=ADMIN_PASSWORD="$ADMIN_PASSWORD" \
             --from-literal=GATEWAY_CLIENT_SECRET="$GATEWAY_CLIENT_SECRET" \
@@ -293,13 +304,13 @@ jobs:
             kubectl -n flight-platform get events --sort-by=.lastTimestamp | tail -80 || true
           }
 
+          for service in $ALL_DEPLOYMENTS; do
+            kubectl -n flight-platform set image "deployment/$service" "$service=$REGISTRY/$service:$TAG"
+          done
           if ! kubectl -n flight-platform rollout status statefulset/kafka --timeout=480s; then
             debug_k8s
             exit 1
           fi
-          for service in $ALL_DEPLOYMENTS; do
-            kubectl -n flight-platform set image "deployment/$service" "$service=$REGISTRY/$service:$TAG"
-          done
           for service in $ALL_DEPLOYMENTS; do
             if ! kubectl -n flight-platform rollout status "deployment/$service" --timeout=240s; then
               debug_k8s
