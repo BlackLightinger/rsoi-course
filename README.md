@@ -83,7 +83,7 @@ docker compose config
 kubectl kustomize k8s/base >/dev/null
 ```
 
-GitHub Actions выполняет Python-тесты, TypeScript/Vite build и проверку Kustomize, затем собирает и публикует отдельный образ каждого сервиса в GHCR. Kubernetes deploy запускается вручную через `Run workflow` с `deploy=true` или автоматически на push в `main`, если repository variable `ENABLE_K8S_DEPLOY=true`. Deploy применяет манифесты, обновляет images всех deployment’ов на immutable tag текущего commit SHA и дожидается rollout. Для deployment нужны secrets `KUBE_CONFIG`, `ADMIN_PASSWORD`, `GATEWAY_CLIENT_SECRET`, `PARTNER_API_KEY` и environment variable `PUBLIC_URL` (например, `https://flight.example.com`). Подробности — в [docs/CI_CD_KUBERNETES.md](docs/CI_CD_KUBERNETES.md).
+GitHub Actions выполняет Python-тесты, TypeScript/Vite build и проверку Kustomize, затем собирает и публикует отдельный образ каждого сервиса в GHCR. После сборки workflow запускает smoke-тесты Docker images, а после Kubernetes deploy — post-deploy smoke-тесты через `kubectl port-forward`. Kubernetes deploy запускается вручную через `Run workflow` с `deploy=true` или автоматически на push в `main`, если repository variable `ENABLE_K8S_DEPLOY=true`. Deploy применяет манифесты, обновляет images всех deployment’ов на immutable tag текущего commit SHA и дожидается rollout. Для deployment нужны secrets `KUBE_CONFIG`, `ADMIN_PASSWORD`, `GATEWAY_CLIENT_SECRET`, `PARTNER_API_KEY` и environment variable `PUBLIC_URL` (например, `https://flight.example.com`). Подробности — в [docs/CI_CD_KUBERNETES.md](docs/CI_CD_KUBERNETES.md).
 
 ## Kubernetes
 

@@ -126,12 +126,71 @@ jobs:
           cache-from: type=gha,scope=web
           cache-to: type=gha,mode=max,scope=web
 
+  image-smoke:
+    name: Smoke test Docker images
+    if: github.event_name != 'pull_request'
+    needs: [python-images, web-image]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve GHCR image prefix
+        id: image
+        run: echo "prefix=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check Python service images expose /health
+        env:
+          REGISTRY: ${{ steps.image.outputs.prefix }}
+          TAG: ${{ github.sha }}
+        run: |
+          for service in $PYTHON_SERVICES; do
+            container="smoke-$service"
+            docker rm -f "$container" >/dev/null 2>&1 || true
+            docker run -d \
+              --name "$container" \
+              -p 18000:8000 \
+              -e KAFKA_ENABLED=false \
+              -e DATA_DIR=/tmp/aeroflow-data \
+              -e ADMIN_PASSWORD=admin123 \
+              -e GATEWAY_CLIENT_SECRET=gateway-dev-secret \
+              -e PARTNER_API_KEY=partner-demo-key \
+              "$REGISTRY/$service:$TAG"
+            for attempt in $(seq 1 30); do
+              if curl -fsS http://127.0.0.1:18000/health >/dev/null; then
+                break
+              fi
+              sleep 1
+            done
+            curl -fsS http://127.0.0.1:18000/health
+            docker rm -f "$container"
+          done
+
+      - name: Check web image exposes /healthz
+        env:
+          REGISTRY: ${{ steps.image.outputs.prefix }}
+          TAG: ${{ github.sha }}
+        run: |
+          docker rm -f smoke-web >/dev/null 2>&1 || true
+          docker run -d --name smoke-web -p 18080:80 "$REGISTRY/web:$TAG"
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:18080/healthz >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:18080/healthz
+          docker rm -f smoke-web
+
   deploy:
     name: Deploy to Kubernetes
     if: >-
       (github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.ENABLE_K8S_DEPLOY == 'true') ||
       (github.event_name == 'workflow_dispatch' && inputs.deploy)
-    needs: [python-images, web-image]
+    needs: image-smoke
     runs-on: ubuntu-latest
     environment: production
     steps:
@@ -195,3 +254,61 @@ jobs:
           for service in $ALL_DEPLOYMENTS; do
             kubectl -n flight-platform rollout status "deployment/$service" --timeout=180s
           done
+
+  post-deploy-smoke:
+    name: Post-deploy smoke tests
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.ENABLE_K8S_DEPLOY == 'true') ||
+      (github.event_name == 'workflow_dispatch' && inputs.deploy)
+    needs: deploy
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: azure/setup-kubectl@v4
+
+      - name: Configure cluster
+        env:
+          KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
+        run: |
+          mkdir -p "$HOME/.kube"
+          printf '%s' "$KUBE_CONFIG" > "$HOME/.kube/config"
+          chmod 600 "$HOME/.kube/config"
+
+      - name: Verify Kubernetes rollout state
+        run: |
+          kubectl -n flight-platform rollout status statefulset/kafka --timeout=120s
+          for service in $ALL_DEPLOYMENTS; do
+            kubectl -n flight-platform rollout status "deployment/$service" --timeout=120s
+          done
+          kubectl -n flight-platform get pods -o wide
+          kubectl -n flight-platform get ingress
+
+      - name: Smoke test deployed HTTP endpoints
+        run: |
+          kubectl -n flight-platform port-forward svc/gateway 18080:8000 >/tmp/gateway-port-forward.log 2>&1 &
+          gateway_pf=$!
+          kubectl -n flight-platform port-forward svc/web 18081:80 >/tmp/web-port-forward.log 2>&1 &
+          web_pf=$!
+          kubectl -n flight-platform port-forward svc/idp 18082:8000 >/tmp/idp-port-forward.log 2>&1 &
+          idp_pf=$!
+          cleanup() {
+            kill "$gateway_pf" "$web_pf" "$idp_pf" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:18080/health >/dev/null \
+              && curl -fsS http://127.0.0.1:18081/healthz >/dev/null \
+              && curl -fsS http://127.0.0.1:18082/health >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+
+          curl -fsS http://127.0.0.1:18080/health
+          curl -fsS http://127.0.0.1:18081/healthz
+          curl -fsS http://127.0.0.1:18082/.well-known/openid-configuration
+          curl -fsS --get 'http://127.0.0.1:18080/api/flights' \
+            --data-urlencode 'origin=Москва' \
+            --data-urlencode 'destination=Санкт-Петербург' \
+            --data-urlencode 'passengers=1'

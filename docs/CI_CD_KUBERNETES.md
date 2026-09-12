@@ -29,7 +29,8 @@ Kafka в Kubernetes используется как инфраструктурн
 
 1. для каждого Python-сервиса собирается отдельный Docker image из `docker/python-service.Dockerfile`;
 2. для `web` собирается отдельный NGINX image из `frontend/Dockerfile`;
-3. images публикуются в GHCR с тегами `${GITHUB_SHA}` и `latest`.
+3. images публикуются в GHCR с тегами `${GITHUB_SHA}` и `latest`;
+4. запускается `Smoke test Docker images`: каждый Python image стартует в контейнере и проверяется через `/health`, web image проверяется через `/healthz`.
 
 Имена GHCR images автоматически приводятся к нижнему регистру. Это важно для репозитория вида `BlackLightinger/rsoi-course`: Docker image будет публиковаться как `ghcr.io/blacklightinger/rsoi-course/<service>:<sha>`.
 
@@ -45,6 +46,13 @@ Deploy job:
 3. обновляет runtime secrets;
 4. выставляет каждому deployment immutable image `ghcr.io/<owner>/<repo>/<service>:<sha>`;
 5. ждёт rollout для Kafka StatefulSet и всех application deployment’ов.
+
+После deploy запускается отдельный job `Post-deploy smoke tests`. Он повторно проверяет rollout, открывает port-forward к `gateway`, `web` и `idp`, затем проверяет:
+
+- `gateway /health`;
+- `web /healthz`;
+- `idp /.well-known/openid-configuration`;
+- публичный поиск рейсов через `gateway /api/flights`.
 
 ## Требования к кластеру
 
