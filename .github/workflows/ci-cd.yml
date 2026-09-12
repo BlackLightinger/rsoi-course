@@ -147,6 +147,11 @@ jobs:
           REGISTRY: ${{ steps.image.outputs.prefix }}
           TAG: ${{ github.sha }}
         run: |
+          set -euo pipefail
+          cleanup_python_smoke() {
+            docker rm -f smoke-idp smoke-flights smoke-tickets smoke-loyalty smoke-payments smoke-statistics smoke-gateway >/dev/null 2>&1 || true
+          }
+          trap cleanup_python_smoke EXIT
           for service in $PYTHON_SERVICES; do
             container="smoke-$service"
             docker rm -f "$container" >/dev/null 2>&1 || true
@@ -160,12 +165,21 @@ jobs:
               -e PARTNER_API_KEY=partner-demo-key \
               "$REGISTRY/$service:$TAG"
             for attempt in $(seq 1 30); do
+              if ! docker ps --format '{{.Names}}' | grep -qx "$container"; then
+                echo "::error::$container exited before /health became available"
+                docker logs "$container" || true
+                exit 1
+              fi
               if curl -fsS http://127.0.0.1:18000/health >/dev/null; then
                 break
               fi
               sleep 1
             done
-            curl -fsS http://127.0.0.1:18000/health
+            if ! curl -fsS http://127.0.0.1:18000/health; then
+              echo "::error::$container did not pass /health smoke test"
+              docker logs "$container" || true
+              exit 1
+            fi
             docker rm -f "$container"
           done
 
@@ -174,15 +188,31 @@ jobs:
           REGISTRY: ${{ steps.image.outputs.prefix }}
           TAG: ${{ github.sha }}
         run: |
+          set -euo pipefail
+          trap 'docker rm -f smoke-web >/dev/null 2>&1 || true' EXIT
           docker rm -f smoke-web >/dev/null 2>&1 || true
-          docker run -d --name smoke-web -p 18080:80 "$REGISTRY/web:$TAG"
+          docker run -d \
+            --name smoke-web \
+            --add-host gateway:127.0.0.1 \
+            --add-host idp:127.0.0.1 \
+            -p 18080:80 \
+            "$REGISTRY/web:$TAG"
           for attempt in $(seq 1 30); do
+            if ! docker ps --format '{{.Names}}' | grep -qx smoke-web; then
+              echo "::error::smoke-web exited before /healthz became available"
+              docker logs smoke-web || true
+              exit 1
+            fi
             if curl -fsS http://127.0.0.1:18080/healthz >/dev/null; then
               break
             fi
             sleep 1
           done
-          curl -fsS http://127.0.0.1:18080/healthz
+          if ! curl -fsS http://127.0.0.1:18080/healthz; then
+            echo "::error::web image did not pass /healthz smoke test"
+            docker logs smoke-web || true
+            exit 1
+          fi
           docker rm -f smoke-web
 
   deploy:
@@ -285,6 +315,8 @@ jobs:
 
       - name: Smoke test deployed HTTP endpoints
         run: |
+          set -euo pipefail
+          kubectl -n flight-platform get endpoints gateway web idp
           kubectl -n flight-platform port-forward svc/gateway 18080:8000 >/tmp/gateway-port-forward.log 2>&1 &
           gateway_pf=$!
           kubectl -n flight-platform port-forward svc/web 18081:80 >/tmp/web-port-forward.log 2>&1 &
@@ -296,19 +328,45 @@ jobs:
           }
           trap cleanup EXIT
 
-          for attempt in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:18080/health >/dev/null \
-              && curl -fsS http://127.0.0.1:18081/healthz >/dev/null \
-              && curl -fsS http://127.0.0.1:18082/health >/dev/null; then
-              break
-            fi
-            sleep 1
-          done
+          fail_smoke() {
+            echo "::error::Post-deploy smoke test failed"
+            kubectl -n flight-platform get pods -o wide || true
+            kubectl -n flight-platform get endpoints gateway web idp || true
+            echo "--- gateway port-forward log ---"
+            cat /tmp/gateway-port-forward.log || true
+            echo "--- web port-forward log ---"
+            cat /tmp/web-port-forward.log || true
+            echo "--- idp port-forward log ---"
+            cat /tmp/idp-port-forward.log || true
+            exit 1
+          }
 
-          curl -fsS http://127.0.0.1:18080/health
-          curl -fsS http://127.0.0.1:18081/healthz
-          curl -fsS http://127.0.0.1:18082/.well-known/openid-configuration
+          wait_for_url() {
+            local name="$1"
+            local url="$2"
+            local pid="$3"
+            for attempt in $(seq 1 45); do
+              if ! kill -0 "$pid" >/dev/null 2>&1; then
+                echo "::error::$name port-forward process exited"
+                fail_smoke
+              fi
+              if curl -fsS "$url" >/dev/null; then
+                return 0
+              fi
+              sleep 1
+            done
+            echo "::error::$name endpoint $url did not become ready"
+            fail_smoke
+          }
+
+          wait_for_url gateway http://127.0.0.1:18080/health "$gateway_pf"
+          wait_for_url web http://127.0.0.1:18081/healthz "$web_pf"
+          wait_for_url idp http://127.0.0.1:18082/health "$idp_pf"
+
+          curl -fsS http://127.0.0.1:18080/health || fail_smoke
+          curl -fsS http://127.0.0.1:18081/healthz || fail_smoke
+          curl -fsS http://127.0.0.1:18082/.well-known/openid-configuration || fail_smoke
           curl -fsS --get 'http://127.0.0.1:18080/api/flights' \
             --data-urlencode 'origin=Москва' \
             --data-urlencode 'destination=Санкт-Петербург' \
-            --data-urlencode 'passengers=1'
+            --data-urlencode 'passengers=1' || fail_smoke
