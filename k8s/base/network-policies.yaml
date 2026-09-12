@@ -1,0 +1,59 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: default-deny-ingress }
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: allow-ingress-controller }
+spec:
+  podSelector:
+    matchExpressions:
+      - { key: tier, operator: In, values: [edge, identity] }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: ingress-nginx }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: allow-gateway-to-domain }
+spec:
+  podSelector:
+    matchLabels: { tier: domain }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: { app: gateway }
+      ports: [{ protocol: TCP, port: 8000 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: allow-platform-to-idp }
+spec:
+  podSelector:
+    matchLabels: { app: idp }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {}
+      ports: [{ protocol: TCP, port: 8000 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: allow-platform-to-kafka }
+spec:
+  podSelector:
+    matchLabels: { app: kafka }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {}
+      ports:
+        - { protocol: TCP, port: 9092 }
+        - { protocol: TCP, port: 9093 }
+

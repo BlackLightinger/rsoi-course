@@ -1,0 +1,2 @@
+"""Loyalty programme service."""
+

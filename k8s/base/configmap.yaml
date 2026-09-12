@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: flight-platform-config
+data:
+  OIDC_INTERNAL_URL: http://idp:8000
+  OIDC_ISSUER: http://flight.local
+  API_AUDIENCE: flight-platform-api
+  KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+  KAFKA_EVENTS_TOPIC: service-events
+  DATA_DIR: /data
+  WEB_REDIRECT_URIS: http://flight.local/callback
+  FLIGHTS_URL: http://flights:8000
+  TICKETS_URL: http://tickets:8000
+  LOYALTY_URL: http://loyalty:8000
+  PAYMENTS_URL: http://payments:8000
+  STATISTICS_URL: http://statistics:8000
+

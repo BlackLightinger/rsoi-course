@@ -1,0 +1,316 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: { name: flights-data }
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests: { storage: 1Gi }
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: { name: tickets-data }
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests: { storage: 1Gi }
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: { name: loyalty-data }
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests: { storage: 1Gi }
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: { name: payments-data }
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests: { storage: 1Gi }
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: { name: statistics-data }
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests: { storage: 1Gi }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: flights }
+spec:
+  selector: { app: flights }
+  ports: [{ port: 8000, targetPort: http }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: tickets }
+spec:
+  selector: { app: tickets }
+  ports: [{ port: 8000, targetPort: http }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: loyalty }
+spec:
+  selector: { app: loyalty }
+  ports: [{ port: 8000, targetPort: http }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: payments }
+spec:
+  selector: { app: payments }
+  ports: [{ port: 8000, targetPort: http }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: statistics }
+spec:
+  selector: { app: statistics }
+  ports: [{ port: 8000, targetPort: http }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: gateway }
+spec:
+  selector: { app: gateway }
+  ports: [{ port: 8000, targetPort: http }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: web }
+spec:
+  selector: { app: web }
+  ports: [{ port: 80, targetPort: http }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: flights }
+spec:
+  replicas: 1
+  strategy: { type: Recreate }
+  selector:
+    matchLabels: { app: flights }
+  template:
+    metadata:
+      labels: { app: flights, tier: domain }
+    spec:
+      securityContext: { fsGroup: 100 }
+      containers:
+        -
+          name: flights
+          image: ghcr.io/your-org/flight-platform-flights:latest
+          imagePullPolicy: IfNotPresent
+          ports: [{ name: http, containerPort: 8000 }]
+          envFrom:
+            - configMapRef: { name: flight-platform-config }
+            - secretRef: { name: flight-platform-secrets }
+          volumeMounts: [{ name: data, mountPath: /data }]
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            initialDelaySeconds: 4
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            initialDelaySeconds: 15
+          resources:
+            requests: { cpu: 75m, memory: 96Mi }
+            limits: { cpu: 400m, memory: 256Mi }
+      volumes:
+        - name: data
+          persistentVolumeClaim: { claimName: flights-data }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: tickets }
+spec:
+  replicas: 1
+  strategy: { type: Recreate }
+  selector:
+    matchLabels: { app: tickets }
+  template:
+    metadata:
+      labels: { app: tickets, tier: domain }
+    spec:
+      securityContext: { fsGroup: 100 }
+      containers:
+        - name: tickets
+          image: ghcr.io/your-org/flight-platform-tickets:latest
+          imagePullPolicy: IfNotPresent
+          ports: [{ name: http, containerPort: 8000 }]
+          envFrom:
+            - configMapRef: { name: flight-platform-config }
+            - secretRef: { name: flight-platform-secrets }
+          volumeMounts: [{ name: data, mountPath: /data }]
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            initialDelaySeconds: 4
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            initialDelaySeconds: 15
+          resources:
+            requests: { cpu: 75m, memory: 96Mi }
+            limits: { cpu: 400m, memory: 256Mi }
+      volumes:
+        - name: data
+          persistentVolumeClaim: { claimName: tickets-data }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: loyalty }
+spec:
+  replicas: 1
+  strategy: { type: Recreate }
+  selector:
+    matchLabels: { app: loyalty }
+  template:
+    metadata:
+      labels: { app: loyalty, tier: domain }
+    spec:
+      securityContext: { fsGroup: 100 }
+      containers:
+        - name: loyalty
+          image: ghcr.io/your-org/flight-platform-loyalty:latest
+          imagePullPolicy: IfNotPresent
+          ports: [{ name: http, containerPort: 8000 }]
+          envFrom:
+            - configMapRef: { name: flight-platform-config }
+            - secretRef: { name: flight-platform-secrets }
+          volumeMounts: [{ name: data, mountPath: /data }]
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            initialDelaySeconds: 4
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            initialDelaySeconds: 15
+          resources:
+            requests: { cpu: 75m, memory: 96Mi }
+            limits: { cpu: 400m, memory: 256Mi }
+      volumes:
+        - name: data
+          persistentVolumeClaim: { claimName: loyalty-data }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: payments }
+spec:
+  replicas: 1
+  strategy: { type: Recreate }
+  selector:
+    matchLabels: { app: payments }
+  template:
+    metadata:
+      labels: { app: payments, tier: domain }
+    spec:
+      securityContext: { fsGroup: 100 }
+      containers:
+        - name: payments
+          image: ghcr.io/your-org/flight-platform-payments:latest
+          imagePullPolicy: IfNotPresent
+          ports: [{ name: http, containerPort: 8000 }]
+          envFrom:
+            - configMapRef: { name: flight-platform-config }
+            - secretRef: { name: flight-platform-secrets }
+          volumeMounts: [{ name: data, mountPath: /data }]
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            initialDelaySeconds: 4
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            initialDelaySeconds: 15
+          resources:
+            requests: { cpu: 75m, memory: 96Mi }
+            limits: { cpu: 400m, memory: 256Mi }
+      volumes:
+        - name: data
+          persistentVolumeClaim: { claimName: payments-data }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: statistics }
+spec:
+  replicas: 1
+  strategy: { type: Recreate }
+  selector:
+    matchLabels: { app: statistics }
+  template:
+    metadata:
+      labels: { app: statistics, tier: domain }
+    spec:
+      securityContext: { fsGroup: 100 }
+      containers:
+        - name: statistics
+          image: ghcr.io/your-org/flight-platform-statistics:latest
+          imagePullPolicy: IfNotPresent
+          ports: [{ name: http, containerPort: 8000 }]
+          envFrom:
+            - configMapRef: { name: flight-platform-config }
+            - secretRef: { name: flight-platform-secrets }
+          volumeMounts: [{ name: data, mountPath: /data }]
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            initialDelaySeconds: 4
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            initialDelaySeconds: 15
+          resources:
+            requests: { cpu: 75m, memory: 96Mi }
+            limits: { cpu: 400m, memory: 256Mi }
+      volumes:
+        - name: data
+          persistentVolumeClaim: { claimName: statistics-data }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: gateway }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: gateway }
+  template:
+    metadata:
+      labels: { app: gateway, tier: edge }
+    spec:
+      containers:
+        - name: gateway
+          image: ghcr.io/your-org/flight-platform-gateway:latest
+          imagePullPolicy: IfNotPresent
+          ports: [{ name: http, containerPort: 8000 }]
+          envFrom:
+            - configMapRef: { name: flight-platform-config }
+            - secretRef: { name: flight-platform-secrets }
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            initialDelaySeconds: 4
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            initialDelaySeconds: 15
+          resources:
+            requests: { cpu: 75m, memory: 96Mi }
+            limits: { cpu: 400m, memory: 256Mi }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: web }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: web }
+  template:
+    metadata:
+      labels: { app: web, tier: edge }
+    spec:
+      containers:
+        - name: web
+          image: ghcr.io/your-org/flight-platform-web:latest
+          imagePullPolicy: IfNotPresent
+          ports: [{ name: http, containerPort: 80 }]
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 3
+          resources:
+            requests: { cpu: 25m, memory: 32Mi }
+            limits: { cpu: 150m, memory: 96Mi }

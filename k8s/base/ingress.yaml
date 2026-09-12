@@ -1,0 +1,29 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: flight-platform
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "5"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "30"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: flight.local
+      http:
+        paths:
+          - path: /.well-known
+            pathType: Prefix
+            backend: { service: { name: idp, port: { number: 8000 } } }
+          - path: /oauth2
+            pathType: Prefix
+            backend: { service: { name: idp, port: { number: 8000 } } }
+          - path: /api
+            pathType: Prefix
+            backend: { service: { name: gateway, port: { number: 8000 } } }
+          - path: /partner
+            pathType: Prefix
+            backend: { service: { name: gateway, port: { number: 8000 } } }
+          - path: /
+            pathType: Prefix
+            backend: { service: { name: web, port: { number: 80 } } }
+

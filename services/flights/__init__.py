@@ -1,0 +1,2 @@
+"""Flights and inventory service."""
+
