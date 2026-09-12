@@ -1,4 +1,4 @@
-.PHONY: install test run build validate-k8s
+.PHONY: install test run build validate-k8s dashboard-install dashboard-open
 
 install:
 	python3 -m pip install -e '.[test]'
@@ -18,3 +18,8 @@ build:
 validate-k8s:
 	kubectl kustomize k8s/base >/dev/null
 
+dashboard-install:
+	./scripts/install-kubernetes-dashboard.sh
+
+dashboard-open:
+	./scripts/open-kubernetes-dashboard.sh

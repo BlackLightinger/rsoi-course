@@ -94,3 +94,14 @@ kubectl apply -k k8s/base
 ```
 
 Базовые host для локального Ingress — `flight.local` и `localhost`. Если используете `flight.local`, добавьте `127.0.0.1 flight.local` в `/etc/hosts`. Перед реальным развёртыванием замените host/public URL и development secrets. Stateful-сервисы имеют по одному replica из-за SQLite; Gateway и Web — по два. NetworkPolicy закрывает прямой вход в доменные сервисы, оставляя маршрут через Gateway.
+
+### Kubernetes Dashboard
+
+Для локальной панели Kubernetes:
+
+```bash
+make dashboard-install
+make dashboard-open
+```
+
+Подробности — в [docs/KUBERNETES_DASHBOARD.md](docs/KUBERNETES_DASHBOARD.md).
