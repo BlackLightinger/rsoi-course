@@ -74,7 +74,9 @@ jobs:
 
       - name: Resolve GHCR image prefix
         id: image
-        run: echo "prefix=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+        run: |
+          repo="$(printf '%s' "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+          echo "prefix=ghcr.io/$repo" >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-buildx-action@v3
 
@@ -106,7 +108,9 @@ jobs:
 
       - name: Resolve GHCR image prefix
         id: image
-        run: echo "prefix=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+        run: |
+          repo="$(printf '%s' "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+          echo "prefix=ghcr.io/$repo" >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-buildx-action@v3
 
@@ -134,7 +138,9 @@ jobs:
     steps:
       - name: Resolve GHCR image prefix
         id: image
-        run: echo "prefix=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+        run: |
+          repo="$(printf '%s' "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+          echo "prefix=ghcr.io/$repo" >> "$GITHUB_OUTPUT"
 
       - uses: docker/login-action@v3
         with:
@@ -237,20 +243,19 @@ jobs:
           PARTNER_API_KEY: ${{ secrets.PARTNER_API_KEY }}
           PUBLIC_URL: ${{ vars.PUBLIC_URL }}
         run: |
-          if [ -z "$KUBE_CONFIG" ]; then
-            echo "::error::KUBE_CONFIG secret is required for Kubernetes deployment."
-            exit 1
-          fi
-          echo "image_prefix=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+          repo="$(printf '%s' "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+          echo "image_prefix=ghcr.io/$repo" >> "$GITHUB_OUTPUT"
           echo "public_url=${PUBLIC_URL:-http://flight.local}" >> "$GITHUB_OUTPUT"
 
       - name: Configure cluster
         env:
           KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
         run: |
-          mkdir -p "$HOME/.kube"
-          printf '%s' "$KUBE_CONFIG" > "$HOME/.kube/config"
-          chmod 600 "$HOME/.kube/config"
+          if [ -n "$KUBE_CONFIG" ]; then
+            mkdir -p "$HOME/.kube"
+            printf '%s' "$KUBE_CONFIG" > "$HOME/.kube/config"
+            chmod 600 "$HOME/.kube/config"
+          fi
           kubectl cluster-info
 
       - name: Apply Kubernetes manifests and runtime secrets
@@ -300,9 +305,11 @@ jobs:
         env:
           KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
         run: |
-          mkdir -p "$HOME/.kube"
-          printf '%s' "$KUBE_CONFIG" > "$HOME/.kube/config"
-          chmod 600 "$HOME/.kube/config"
+          if [ -n "$KUBE_CONFIG" ]; then
+            mkdir -p "$HOME/.kube"
+            printf '%s' "$KUBE_CONFIG" > "$HOME/.kube/config"
+            chmod 600 "$HOME/.kube/config"
+          fi
 
       - name: Verify Kubernetes rollout state
         run: |
