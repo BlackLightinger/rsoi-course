@@ -88,7 +88,7 @@ helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
 
 Для production environment в GitHub нужно задать secrets:
 
-- `KUBE_CONFIG` — kubeconfig для целевого кластера;
+- `KUBE_CONFIG` — kubeconfig для целевого удалённого кластера. Для локального Docker Desktop/Minikube на self-hosted runner обычно не нужен;
 - `ADMIN_PASSWORD` — пароль администратора IdP;
 - `GATEWAY_CLIENT_SECRET` — client secret сервисного клиента Gateway;
 - `PARTNER_API_KEY` — ключ ограниченного partner API.
@@ -97,8 +97,16 @@ helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
 
 - `PUBLIC_URL` — внешний адрес приложения, например `https://flight.example.com`.
 - `ENABLE_K8S_DEPLOY` — `true`, если нужно автоматически деплоить в Kubernetes на каждый push в `main`. Без этой переменной деплой можно запускать вручную через `workflow_dispatch`.
+- `USE_KUBE_CONFIG_SECRET` — `true`, только если deploy должен использовать `KUBE_CONFIG` secret. Для локального Docker Desktop/Minikube оставьте unset/`false`, чтобы self-hosted runner использовал свой локальный kubeconfig.
 
 `PUBLIC_URL` используется как OIDC issuer и redirect URI, поэтому он должен совпадать с host, который ведёт на Ingress.
+
+Если в GitHub Actions появляется `system:anonymous cannot get path "/"`, значит workflow применил kubeconfig без валидных credentials. Для локального кластера удалите `KUBE_CONFIG` secret или оставьте `USE_KUBE_CONFIG_SECRET` выключенным, затем на Mac проверьте:
+
+```bash
+kubectl config use-context docker-desktop
+kubectl auth can-i get pods -n flight-platform
+```
 
 ## Kubernetes-манифесты
 
@@ -113,6 +121,7 @@ helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
   - `/` → `web`;
   - `/api`, `/partner` → `gateway`;
   - `/oauth2`, `/.well-known` → `idp`;
+  - локальные host’ы: `flight.local` и `localhost`;
 - `NetworkPolicy`, закрывающие прямой вход в доменные сервисы и оставляющие доступ через Gateway/Ingress.
 
 Локальная проверка манифестов:

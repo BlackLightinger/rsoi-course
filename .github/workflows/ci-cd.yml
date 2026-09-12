@@ -318,13 +318,24 @@ jobs:
       - name: Configure cluster
         env:
           KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
+          USE_KUBE_CONFIG_SECRET: ${{ vars.USE_KUBE_CONFIG_SECRET }}
         run: |
-          if [ -n "$KUBE_CONFIG" ]; then
-            mkdir -p "$HOME/.kube"
-            printf '%s' "$KUBE_CONFIG" > "$HOME/.kube/config"
-            chmod 600 "$HOME/.kube/config"
+          if [ "$USE_KUBE_CONFIG_SECRET" = "true" ]; then
+            if [ -z "$KUBE_CONFIG" ]; then
+              echo "::error::USE_KUBE_CONFIG_SECRET=true, but KUBE_CONFIG secret is empty."
+              exit 1
+            fi
+            kubeconfig_path="$RUNNER_TEMP/kubeconfig"
+            printf '%s' "$KUBE_CONFIG" > "$kubeconfig_path"
+            chmod 600 "$kubeconfig_path"
+            echo "KUBECONFIG=$kubeconfig_path" >> "$GITHUB_ENV"
+            export KUBECONFIG="$kubeconfig_path"
+          else
+            echo "Using local kubeconfig from the self-hosted runner."
           fi
+          kubectl config current-context
           kubectl cluster-info
+          kubectl auth can-i get pods -n flight-platform
 
       - name: Apply Kubernetes manifests and runtime secrets
         env:
@@ -413,12 +424,24 @@ jobs:
       - name: Configure cluster
         env:
           KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
+          USE_KUBE_CONFIG_SECRET: ${{ vars.USE_KUBE_CONFIG_SECRET }}
         run: |
-          if [ -n "$KUBE_CONFIG" ]; then
-            mkdir -p "$HOME/.kube"
-            printf '%s' "$KUBE_CONFIG" > "$HOME/.kube/config"
-            chmod 600 "$HOME/.kube/config"
+          if [ "$USE_KUBE_CONFIG_SECRET" = "true" ]; then
+            if [ -z "$KUBE_CONFIG" ]; then
+              echo "::error::USE_KUBE_CONFIG_SECRET=true, but KUBE_CONFIG secret is empty."
+              exit 1
+            fi
+            kubeconfig_path="$RUNNER_TEMP/kubeconfig"
+            printf '%s' "$KUBE_CONFIG" > "$kubeconfig_path"
+            chmod 600 "$kubeconfig_path"
+            echo "KUBECONFIG=$kubeconfig_path" >> "$GITHUB_ENV"
+            export KUBECONFIG="$kubeconfig_path"
+          else
+            echo "Using local kubeconfig from the self-hosted runner."
           fi
+          kubectl config current-context
+          kubectl cluster-info
+          kubectl auth can-i get pods -n flight-platform
 
       - name: Verify Kubernetes rollout state
         run: |

@@ -93,4 +93,4 @@ GitHub Actions выполняет Python-тесты, TypeScript/Vite build и п
 kubectl apply -k k8s/base
 ```
 
-Базовый host — `flight.local`. Перед реальным развёртыванием замените host/public URL и development secrets. Stateful-сервисы имеют по одному replica из-за SQLite; Gateway и Web — по два. NetworkPolicy закрывает прямой вход в доменные сервисы, оставляя маршрут через Gateway.
+Базовые host для локального Ingress — `flight.local` и `localhost`. Если используете `flight.local`, добавьте `127.0.0.1 flight.local` в `/etc/hosts`. Перед реальным развёртыванием замените host/public URL и development secrets. Stateful-сервисы имеют по одному replica из-за SQLite; Gateway и Web — по два. NetworkPolicy закрывает прямой вход в доменные сервисы, оставляя маршрут через Gateway.

@@ -26,4 +26,21 @@ spec:
           - path: /
             pathType: Prefix
             backend: { service: { name: web, port: { number: 80 } } }
-
+    - host: localhost
+      http:
+        paths:
+          - path: /.well-known
+            pathType: Prefix
+            backend: { service: { name: idp, port: { number: 8000 } } }
+          - path: /oauth2
+            pathType: Prefix
+            backend: { service: { name: idp, port: { number: 8000 } } }
+          - path: /api
+            pathType: Prefix
+            backend: { service: { name: gateway, port: { number: 8000 } } }
+          - path: /partner
+            pathType: Prefix
+            backend: { service: { name: gateway, port: { number: 8000 } } }
+          - path: /
+            pathType: Prefix
+            backend: { service: { name: web, port: { number: 80 } } }
